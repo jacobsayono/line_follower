@@ -17,18 +17,20 @@ class LineDetector(Node):
         self.bridge = CvBridge()
 
     def find_line(self, cv_image):
-        # Define HSV range for black and white
-        white_range = {'h_min': 0, 'h_max': 180, 's_min': 0, 's_max': 50, 'v_min': 200, 'v_max': 255}
+        # Define HSV range for black
         black_range = {'h_min': 0, 'h_max': 180, 's_min': 0, 's_max': 255, 'v_min': 0, 'v_max': 50}
 
-        # Convert image to HSV
-        hsv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        # Crop the image to the lower third
+        height = cv_image.shape[0]
+        crop_start = 2 * height // 3  # Start cropping at two-thirds down the image
+        cropped_image = cv_image[crop_start:height, :]
 
-        # Thresholding for white and black
-        white_mask = cv2.inRange(hsv_image, (white_range['h_min'], white_range['s_min'], white_range['v_min']),
-                                          (white_range['h_max'], white_range['s_max'], white_range['v_max']))
+        # Convert cropped image to HSV
+        hsv_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2HSV)
+
+        # Thresholding for black
         black_mask = cv2.inRange(hsv_image, (black_range['h_min'], black_range['s_min'], black_range['v_min']),
-                                          (black_range['h_max'], black_range['s_max'], black_range['v_max']))
+                                            (black_range['h_max'], black_range['s_max'], black_range['v_max']))
 
         # Clean up image using morphological operations
         kernel = np.ones((5,5), np.uint8)
@@ -43,9 +45,11 @@ class LineDetector(Node):
             largest_contour = max(contours, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(largest_contour)
             line_center_x = x + w // 2
-            return line_center_x, black_mask
+            return line_center_x
 
-        return None, black_mask
+        return None
+
+
 
     def image_callback(self, data):
         try:
