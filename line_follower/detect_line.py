@@ -17,23 +17,17 @@ class LineDetector(Node):
         self.bridge = CvBridge()
 
     def find_line(self, cv_image):
-        # Define HSV range for black
-        black_range = {'h_min': 0, 'h_max': 180, 's_min': 0, 's_max': 255, 'v_min': 0, 'v_max': 50}
+        # Threshold value for detecting black
+        black_threshold = 50  # Adjust this threshold based on your specific lighting conditions and camera settings
 
-        # Crop the image to the lower third
-        height = cv_image.shape[0]
-        crop_start = 2 * height // 3  # Start cropping at two-thirds down the image
-        cropped_image = cv_image[crop_start:height, :]
+        # Threshold the grayscale image to get a binary mask
+        _, black_mask = cv2.threshold(cv_image, black_threshold, 255, cv2.THRESH_BINARY_INV)
 
-        # Convert cropped image to HSV
-        hsv_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2HSV)
-
-        # Thresholding for black
-        black_mask = cv2.inRange(hsv_image, (black_range['h_min'], black_range['s_min'], black_range['v_min']),
-                                            (black_range['h_max'], black_range['s_max'], black_range['v_max']))
+        # Ensure the mask is in the correct type, should be uint8
+        black_mask = np.uint8(black_mask)
 
         # Clean up image using morphological operations
-        kernel = np.ones((5,5), np.uint8)
+        kernel = np.ones((5, 5), np.uint8)
         black_mask = cv2.morphologyEx(black_mask, cv2.MORPH_OPEN, kernel)
         black_mask = cv2.morphologyEx(black_mask, cv2.MORPH_CLOSE, kernel)
 
@@ -45,24 +39,38 @@ class LineDetector(Node):
             largest_contour = max(contours, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(largest_contour)
             line_center_x = x + w // 2
-            return line_center_x
+            return line_center_x, black_mask
 
-        return None
-
-
+        return None, black_mask
 
     def image_callback(self, data):
         try:
+            # Convert ROS image message to OpenCV image
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
             self.get_logger().error(str(e))
             return
 
+        # Convert to grayscale
+        gray_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+
+        # Resize the grayscale image to reduce resolution and processing time
+        scale_percent = 50  # percentage of original size
+        width = int(gray_image.shape[1] * scale_percent / 100)
+        height = int(gray_image.shape[0] * scale_percent / 100)
+        dim = (width, height)
+        resized_gray_image = cv2.resize(gray_image, dim, interpolation=cv2.INTER_AREA)
+
+        # Crop the image to the lower third
+        crop_start = 2 * height // 3  # Start cropping at two-thirds down the image
+        cropped_image = resized_gray_image[crop_start:height, :]
+
         # Publish the original image for visualization
-        original_img_msg = self.bridge.cv2_to_imgmsg(cv_image, "bgr8")
+        original_img_msg = self.bridge.cv2_to_imgmsg(resized_gray_image, "mono8")
         self.original_image_pub.publish(original_img_msg)
 
-        line_x, processed_image = self.find_line(cv_image)
+        # Process the cropped grayscale image to find the line
+        line_x, processed_image = self.find_line(cropped_image)
 
         # Publish the processed image
         processed_img_msg = self.bridge.cv2_to_imgmsg(processed_image, "mono8")

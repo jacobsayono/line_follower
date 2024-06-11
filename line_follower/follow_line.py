@@ -10,21 +10,21 @@ class FollowLine(Node):
             '/line_position',
             self.line_callback,
             10)
-        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel_tracker', 10)
         self.get_logger().info('Follow Line Node Started')
 
     def line_callback(self, msg):
         twist = Twist()
         center_x = msg.x
         if center_x == -1:  # No line detected
-            twist.linear.x = 0.0
-            twist.angular.z = 0.0
+            twist.linear.x = 0.1
+            twist.angular.z = 0.5
         else:
-            image_center_x = 320  # Assuming image width of 640
+            image_center_x = 320 / 2  # Assuming image width of 640
             error = center_x - image_center_x
-            twist.linear.x = 0.5  # Constant forward speed
-            twist.angular.z = -0.005 * error  # Proportional control
-
+            twist.linear.x = 0.35  # Constant forward speed
+            twist.angular.z = -0.01 * error  # Proportional control
+            
         self.publisher_.publish(twist)
         self.get_logger().info(f'Published cmd_vel: linear={twist.linear.x}, angular={twist.angular.z}')
 
